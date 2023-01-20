@@ -1,0 +1,14 @@
+{
+	"player":{
+		"pos":[0,0],
+		
+		"inventory":{
+			
+			}
+	},
+	
+	"otherstuff":{
+		"create date":"DD/MM/YY"
+	}
+}
+
