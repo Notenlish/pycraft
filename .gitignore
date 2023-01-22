@@ -150,3 +150,25 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+appdata/tiles/0.png
+appdata/tiles/1.png
+appdata/tiles/10.png
+appdata/tiles/11.png
+appdata/tiles/2.png
+appdata/tiles/3.png
+appdata/tiles/4.png
+appdata/tiles/5.png
+appdata/tiles/6.png
+appdata/tiles/7.png
+appdata/tiles/8.png
+appdata/tiles/9.png
+DEV/dev1.ase
+DEV/ec0e1cdabfd293a_ek.jpg
+DEV/index.png
+DEV/minecraft_sheet.png
+DEV/player.png
+DEV/project notes
+DEV/sourceimg.png
+DEV/test.py
+DEV/test.webp
+test.py

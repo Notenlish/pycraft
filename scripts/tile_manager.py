@@ -4,9 +4,10 @@ from settings import (CHUNK_RADIUS, CHUNK_WIDTH,
                       CHUNK_HEIGHT, BLOCK_PIXEL_SIZE,
                       CHUNK_GROUND_BASE, PERLIN_MULTIPLIER)
 from scripts.tiles import TILES
-import opensimplex
 from os import listdir, remove
+import opensimplex
 import json
+import random
 
 # Im just gonna force it by just saving the loaded chunks in map info and
 # Ig it will work?
@@ -116,10 +117,11 @@ class TileManager:
 
     def generate_chunk_terrain(self, chunkpos):
         chunkterrains = [[] for x in range(CHUNK_HEIGHT)]
+        print(chunkterrains)
         xstart, xend = chunkpos * CHUNK_WIDTH, (chunkpos+1) * CHUNK_WIDTH
         for x in range(xstart, xend):
             x *= 0.6
-            ground_level = opensimplex.noise2(x=x/CHUNK_WIDTH, y=5)  # 0.2 is y val
+            ground_level = opensimplex.noise2(x=x/CHUNK_WIDTH, y=5)  # 0.2 is yval
             ground_level = int(ground_level * PERLIN_MULTIPLIER)
             ground_level = CHUNK_GROUND_BASE - ground_level
 
@@ -130,9 +132,10 @@ class TileManager:
                     filled = False
 
                 if filled:
-                    noise_val = opensimplex.noise2(x=x/CHUNK_WIDTH, y=y*3/CHUNK_HEIGHT)
-                    if noise_val > -0.9 and noise_val < -0.6:  # cave
-                        filled = False
+                    noise_val = opensimplex.noise2(x=x/CHUNK_WIDTH,
+                                                   y=y*3/CHUNK_HEIGHT)
+                    if ((noise_val > -0.9 and noise_val < -0.6) or
+                            (noise_val > 0.7)):  # cave
                         chunkterrains[y].append(TILES.AIR.value)
                     else:
                         if y == ground_level:
@@ -144,11 +147,24 @@ class TileManager:
                                 chunkterrains[y].append(TILES.DIRT.value)
                 if not filled:
                     chunkterrains[y].append(TILES.AIR.value)
+
+            for _ in range(10):
+                shouldgen = random.randint(0, 10)
+                if shouldgen < 2:  # coal
+                    x = random.randint(0, CHUNK_WIDTH)
+                    while True:
+                        y = random.randint(0, CHUNK_HEIGHT)
+                        print(x, y, TILES.GRASS.value, chunkterrains)
+                        if chunkterrains[y][x] == TILES.STONE.value:
+                            chunkterrains[y][x] = TILES.COAL_ORE.value
+                        else:
+                            continue
+                elif shouldgen == 2:  # iron
+                    x = random.randint(0, CHUNK_WIDTH)
+
         return chunkterrains
 
     def generate_new_chunk(self, chunkpos):
-        # tiledata = [[0]*CHUNK_WIDTH for x in range(CHUNK_HEIGHT)]
-        # [[8][8][8][8]] 8 means len is 8
         tiledata = self.generate_chunk_terrain(chunkpos)
         self.loaded_chunks[chunkpos] = {
                     "tiledata": tiledata,  # maybe np array?
