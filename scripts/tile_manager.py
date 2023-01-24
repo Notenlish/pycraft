@@ -115,54 +115,81 @@ class TileManager:
         except FileNotFoundError:
             return FileNotFoundError
 
+    def calc_block(self, x, y, ground_level):
+        filled = True
+        block_to_use = 11
+        if y < ground_level:  # air
+            filled = False
+
+        if filled:
+            # to determine if its a cave
+            noise_val = opensimplex.noise2(x=x/CHUNK_WIDTH,
+                                           y=y*3/CHUNK_HEIGHT)
+            if ((noise_val > -0.9 and noise_val < -0.6) or
+                    (noise_val > 0.7)):  # cave
+                block_to_use = TILES.AIR.value
+            else:
+                if y == ground_level:
+                    block_to_use = TILES.GRASS.value
+                if y > ground_level:
+                    if y > ground_level*1.3:
+                        block_to_use = TILES.STONE.value
+                    else:
+                        block_to_use = TILES.DIRT.value
+        if not filled:
+            block_to_use = TILES.AIR.value
+        # if y == CHUNK_HEIGHT-1:
+        #    block_to_use = TILES.BEDROCK.value
+        return block_to_use
+
     def generate_chunk_terrain(self, chunkpos):
-        chunkterrains = [[] for x in range(CHUNK_HEIGHT)]
-        print(chunkterrains)
+        chunkdata = [[] for x in range(CHUNK_HEIGHT)]
         xstart, xend = chunkpos * CHUNK_WIDTH, (chunkpos+1) * CHUNK_WIDTH
         for x in range(xstart, xend):
+            print(f"WUT DA HELL {x} {xstart} {xend}")
             x *= 0.6
-            ground_level = opensimplex.noise2(x=x/CHUNK_WIDTH, y=5)  # 0.2 is yval
+            ground_level = opensimplex.noise2(x=x/CHUNK_WIDTH, y=5)
             ground_level = int(ground_level * PERLIN_MULTIPLIER)
             ground_level = CHUNK_GROUND_BASE - ground_level
 
             for y in range(CHUNK_HEIGHT):
-                filled = True
+                block_to_use = self.calc_block(x, y, ground_level)
+                chunkdata[y].append(block_to_use)
 
-                if y < ground_level:  # air
-                    filled = False
+        self.generate_ores(chunkdata)
 
-                if filled:
-                    noise_val = opensimplex.noise2(x=x/CHUNK_WIDTH,
-                                                   y=y*3/CHUNK_HEIGHT)
-                    if ((noise_val > -0.9 and noise_val < -0.6) or
-                            (noise_val > 0.7)):  # cave
-                        chunkterrains[y].append(TILES.AIR.value)
-                    else:
-                        if y == ground_level:
-                            chunkterrains[y].append(TILES.GRASS.value)
-                        if y > ground_level:
-                            if y > ground_level*1.3:
-                                chunkterrains[y].append(TILES.STONE.value)
-                            else:
-                                chunkterrains[y].append(TILES.DIRT.value)
-                if not filled:
-                    chunkterrains[y].append(TILES.AIR.value)
+        for x in range(0, 8):  # bedrock
+            chunkdata[CHUNK_HEIGHT-1][x] = TILES.BEDROCK.value
 
-            for _ in range(10):
-                shouldgen = random.randint(0, 10)
-                if shouldgen < 2:  # coal
-                    x = random.randint(0, CHUNK_WIDTH)
-                    while True:
-                        y = random.randint(0, CHUNK_HEIGHT)
-                        print(x, y, TILES.GRASS.value, chunkterrains)
-                        if chunkterrains[y][x] == TILES.STONE.value:
-                            chunkterrains[y][x] = TILES.COAL_ORE.value
-                        else:
-                            continue
-                elif shouldgen == 2:  # iron
-                    x = random.randint(0, CHUNK_WIDTH)
+        return chunkdata
 
-        return chunkterrains
+    def generate_ores(self, chunkdata):
+        # we have added every block now we can create ores, trees etc.
+        for _ in range(10):
+            val = random.randint(0, 8)
+            xpos = random.randint(0, CHUNK_WIDTH-1)
+            ypos = random.randint(0, CHUNK_HEIGHT-1)
+            if chunkdata[ypos][xpos] == TILES.STONE.value:
+                orex, orey = xpos, ypos
+                # place iron
+                ore_direction = [random.choice([-1, 0, 1]),
+                                 random.choice([-1, 0, 1])]
+                length = random.choice([1, 2, 3])
+                size_multiplier = random.choice([0, 1])
+
+                ore = self.generate_ore_type(val, orey)
+
+                for i in range(length):
+                    for xs in range(orex-size_multiplier, orex+size_multiplier):
+                        for ys in range(orey-size_multiplier, orey+size_multiplier):
+                            try:
+                                row = chunkdata[ys + (i*ore_direction[1])]
+                                row[xs + (i*ore_direction[0])] = ore
+                            except IndexError:  # If it goes beyond chunk bound
+                                pass
+
+    def generate_ore_type(self, val, y):
+        return TILES.IRON_ORE.value
 
     def generate_new_chunk(self, chunkpos):
         tiledata = self.generate_chunk_terrain(chunkpos)
