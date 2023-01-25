@@ -172,3 +172,6 @@ DEV/sourceimg.png
 DEV/test.py
 DEV/test.webp
 test.py
+appdata/tiles/13.png
+appdata/tiles/12.png
+*.kate-swp

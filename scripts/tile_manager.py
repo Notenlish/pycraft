@@ -94,12 +94,13 @@ class TileManager:
         chunks = list(self.loaded_chunks.keys()).copy()
         for c in chunks:
             self.unload_chunk(c)
+        print("UNLOADED EVERYTHING")
         if self.testmode:
             path = "worlds/testworld1/chunks/"
             chunkfiles = listdir(path)
             for f in chunkfiles:
                 remove(path+f)
-        print("UNLOADED EVERYTHING")
+            print("DELETED EVERY CHUNK")
 
     def unload_chunk(self, chunkpos):
         self.loaded_chunks[chunkpos]
@@ -111,7 +112,7 @@ class TileManager:
                 json.dump(self.loaded_chunks[chunkpos], chunkfile)
 
             self.loaded_chunks.pop(chunkpos)
-            print(f"UNLOADED CHUNK: {chunkpos} chunk")
+            print(f"UNLOADED CHUNK: {chunkpos}")
         except FileNotFoundError:
             return FileNotFoundError
 
@@ -146,7 +147,6 @@ class TileManager:
         chunkdata = [[] for x in range(CHUNK_HEIGHT)]
         xstart, xend = chunkpos * CHUNK_WIDTH, (chunkpos+1) * CHUNK_WIDTH
         for x in range(xstart, xend):
-            print(f"WUT DA HELL {x} {xstart} {xend}")
             x *= 0.6
             ground_level = opensimplex.noise2(x=x/CHUNK_WIDTH, y=5)
             ground_level = int(ground_level * PERLIN_MULTIPLIER)
@@ -166,7 +166,7 @@ class TileManager:
     def generate_ores(self, chunkdata):
         # we have added every block now we can create ores, trees etc.
         for _ in range(10):
-            val = random.randint(0, 8)
+            val = random.randint(0, 9)
             xpos = random.randint(0, CHUNK_WIDTH-1)
             ypos = random.randint(0, CHUNK_HEIGHT-1)
             if chunkdata[ypos][xpos] == TILES.STONE.value:
@@ -183,13 +183,28 @@ class TileManager:
                     for xs in range(orex-size_multiplier, orex+size_multiplier):
                         for ys in range(orey-size_multiplier, orey+size_multiplier):
                             try:
-                                row = chunkdata[ys + (i*ore_direction[1])]
-                                row[xs + (i*ore_direction[0])] = ore
+                                ys = ys + (i*ore_direction[1])
+                                xs = xs + (i*ore_direction[0])
+                                if chunkdata[ys][xs] == TILES.STONE.value:
+                                    row = chunkdata[ys]
+                                    row[xs] = ore
                             except IndexError:  # If it goes beyond chunk bound
                                 pass
 
     def generate_ore_type(self, val, y):
-        return TILES.IRON_ORE.value
+        # coal will be everywhere and if the val is 4 or lower
+        # iron will be everywhere too and occurs if the val == 5 and 6
+        # gold will be if y<= CHUNK_HEIGHT*0.7 and val == 7
+        # diamons will be if y<= CHUNK_HEIGHT*0.7 and val == 8
+        if val <= 3:
+            return TILES.COAL_ORE.value
+        if val >= 4 and val <= 7:
+            return TILES.IRON_ORE.value
+        if val == 8 and y >= CHUNK_HEIGHT*0.8:
+            return TILES.GOLD_ORE.value
+        if val == 9 and y >= CHUNK_HEIGHT*0.8:
+            return TILES.DIAMOND_ORE.value
+        return random.choice([TILES.COAL_ORE.value, TILES.IRON_ORE.value])
 
     def generate_new_chunk(self, chunkpos):
         tiledata = self.generate_chunk_terrain(chunkpos)

@@ -14,3 +14,5 @@ class TILES(Enum):
     GRAVEL = 9
     COAL_ORE = 10
     IRON_ORE = 11
+    GOLD_ORE = 12
+    DIAMOND_ORE = 13
