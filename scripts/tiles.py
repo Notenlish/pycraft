@@ -4,7 +4,7 @@ from enum import Enum
 class TILES(Enum):
     AIR = 0
     DIRT = 1
-    GRASS = 2
+    GRASS_BLOCK = 2
     STONE = 3
     LOG = 4
     LEAVES = 5
@@ -16,3 +16,8 @@ class TILES(Enum):
     IRON_ORE = 11
     GOLD_ORE = 12
     DIAMOND_ORE = 13
+    DEAD_SHRUB = 14
+    GRASS_PLANT = 15
+    RED_FLOWER = 16
+    YELLOW_FLOWER = 17
+    TREE_SAPLING = 18

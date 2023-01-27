@@ -1,4 +1,4 @@
-from pygame import surface
+from pygame import surface, draw
 from typing import Dict
 from settings import (CHUNK_RADIUS, CHUNK_WIDTH,
                       CHUNK_HEIGHT, BLOCK_PIXEL_SIZE,
@@ -18,6 +18,13 @@ import random
 # noise is from -1 to 1
 # you can put in any number of arguments so it can be 1d 2d 3d 4d etc
 # but it always returns a float
+
+def clamp_chunk_width(val):
+    return max(0, min(val, CHUNK_WIDTH-1))
+
+
+def clamp_chunk_height(val):
+    return max(0, min(val, CHUNK_HEIGHT-1))
 
 
 class TileManager:
@@ -68,9 +75,9 @@ class TileManager:
                        -self.camera.pos[1]))
 
     def set_centerpos(self, new_x: int):
-        self.calc(new_x)
+        self.calc_centerpos(new_x)
 
-    def calc(self, new_x):
+    def calc_centerpos(self, new_x):
         self.centerpos = new_x//(CHUNK_WIDTH*BLOCK_PIXEL_SIZE)  # update pos
         center_chunkx = self.centerpos
         for x in range(center_chunkx - self.chunkradius,
@@ -131,7 +138,7 @@ class TileManager:
                 block_to_use = TILES.AIR.value
             else:
                 if y == ground_level:
-                    block_to_use = TILES.GRASS.value
+                    block_to_use = TILES.GRASS_BLOCK.value
                 if y > ground_level:
                     if y > ground_level*1.3:
                         block_to_use = TILES.STONE.value
@@ -143,9 +150,64 @@ class TileManager:
         #    block_to_use = TILES.BEDROCK.value
         return block_to_use
 
+    def generate_vegetation(self, chunkdata):
+        for _ in range(2):
+            # I dont want to create a new cache just so tree leaves
+            # dont cut out so I'm just gonna make it from 1 to 6
+            x = random.randint(1, CHUNK_WIDTH-2)
+            for y in range(0, CHUNK_HEIGHT):
+                if chunkdata[y][x] == TILES.GRASS_BLOCK.value:
+                    can_place_tree = True
+                    a = [x-1, x, x+1]
+                    b = [y-1, y-2, y-3, y-4]
+                    result = []
+                    for el1 in a:
+                        for el2 in b:
+                            result.append((clamp_chunk_width(el1),
+                                           clamp_chunk_height(el2)))
+                    for nearx, neary in result:
+                        tile = chunkdata[neary][nearx]
+                        if (tile != TILES.AIR.value and
+                            tile != TILES.DIRT.value and
+                            tile != TILES.GRASS_BLOCK.value):
+                            can_place_tree = False
+
+                    if can_place_tree:
+                        self.place_tree(chunkdata, x, y)
+                    break  # stop going down
+        plant_types = [TILES.GRASS_PLANT, TILES.GRASS_PLANT,
+                       TILES.GRASS_PLANT, TILES.GRASS_PLANT,
+                       TILES.RED_FLOWER, TILES.YELLOW_FLOWER]
+        for x in range(0, CHUNK_WIDTH):
+            for y in range(0, CHUNK_HEIGHT):
+                if (chunkdata[y][x] == TILES.GRASS_BLOCK.value and
+                    chunkdata[y-1][x] == TILES.AIR.value):
+                    if random.choice([True, False]):
+                        chunkdata[y-1][x] = random.choice(plant_types).value
+                    break
+
+    def place_tree(self, chunkdata, x, y):
+        chunkdata[clamp_chunk_height(
+            y-1)][clamp_chunk_width(x)] = TILES.LOG.value
+        chunkdata[clamp_chunk_height(
+            y-2)][clamp_chunk_width(x)] = TILES.LOG.value
+        chunkdata[clamp_chunk_height(
+            y-3)][clamp_chunk_width(x)] = TILES.LOG.value
+        chunkdata[clamp_chunk_height(
+            y-3)][clamp_chunk_width(x-1)] = TILES.LEAVES.value
+        chunkdata[clamp_chunk_height(
+            y-3)][clamp_chunk_width(x+1)] = TILES.LEAVES.value
+        chunkdata[clamp_chunk_height(
+            y-4)][clamp_chunk_width(x-1)] = TILES.LEAVES.value
+        chunkdata[clamp_chunk_height(
+            y-4)][clamp_chunk_width(x)] = TILES.LEAVES.value
+        chunkdata[clamp_chunk_height(
+            y-4)][clamp_chunk_width(x+1)] = TILES.LEAVES.value
+
     def generate_chunk_terrain(self, chunkpos):
         chunkdata = [[] for x in range(CHUNK_HEIGHT)]
         xstart, xend = chunkpos * CHUNK_WIDTH, (chunkpos+1) * CHUNK_WIDTH
+        tile_x = 0
         for x in range(xstart, xend):
             x *= 0.6
             ground_level = opensimplex.noise2(x=x/CHUNK_WIDTH, y=5)
@@ -155,8 +217,10 @@ class TileManager:
             for y in range(CHUNK_HEIGHT):
                 block_to_use = self.calc_block(x, y, ground_level)
                 chunkdata[y].append(block_to_use)
+            tile_x += 1
 
         self.generate_ores(chunkdata)
+        self.generate_vegetation(chunkdata)
 
         for x in range(0, 8):  # bedrock
             chunkdata[CHUNK_HEIGHT-1][x] = TILES.BEDROCK.value
@@ -227,6 +291,9 @@ class TileManager:
                                 (x*BLOCK_PIXEL_SIZE, y*BLOCK_PIXEL_SIZE))
                 x += 1
             y += 1
+        draw.line(chunk_surf, (0, 25, 255), (0, 0),
+                  (0, CHUNK_HEIGHT*BLOCK_PIXEL_SIZE), 2)
+
         return chunk_surf
 
     def __str__(self):

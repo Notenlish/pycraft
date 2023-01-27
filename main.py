@@ -1,6 +1,6 @@
 import pygame as pg
 import sys
-from settings import WINDOW_SIZE, FLAGS
+from settings import WINDOW_SIZE, FLAGS, SKY_COLOR
 from scripts.resources import Resources
 from scripts.start_screen import StartScreen
 from scripts.tile_manager import TileManager
@@ -84,7 +84,7 @@ class APP:
             self.player.update(self.dt, self.mpos)
 
     def draw(self):
-        self.window.fill((35, 35, 35))
+        self.window.fill(SKY_COLOR)
         if self.mode == "start":
             self.start_screen.draw(self.window)
         elif self.mode == "game":

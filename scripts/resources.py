@@ -1,5 +1,5 @@
-from pygame import font, image
-from settings import FONT_SIZE
+from pygame import font, image, Surface
+from settings import FONT_SIZE, SKY_COLOR
 from scripts.tiles import TILES
 font.init()
 
@@ -14,5 +14,9 @@ class Resources:
             }
         self.tile_sprs = {}
         for i in TILES:
-            self.tile_sprs[i.value] = image.load("appdata/tiles/"+str(i.value)+".png")
-        print(self.tile_sprs)
+            tile_surf = image.load("appdata/tiles/"+str(i.value)+".png").convert_alpha()
+            new_surf = Surface(tile_surf.get_size())
+            # fill transparent parts withskycolor
+            new_surf.fill(SKY_COLOR)
+            new_surf.blit(tile_surf, (0, 0))
+            self.tile_sprs[i.value] = new_surf
