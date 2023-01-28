@@ -8,16 +8,17 @@ from os import listdir, remove
 import opensimplex
 import json
 import random
-
-# Im just gonna force it by just saving the loaded chunks in map info and
-# Ig it will work?
-# OK I did the test and it barely makes a dent in the memory like 0.1 mbs for
-# like 11.000 chunks so yeah its not a problem
+import time
+import threading
 
 
-# noise is from -1 to 1
-# you can put in any number of arguments so it can be 1d 2d 3d 4d etc
-# but it always returns a float
+def threaded(fn):
+    def wrapper(*args, **kwargs):
+        thread = threading.Thread(target=fn, args=args, kwargs=kwargs)
+        thread.start()
+        return thread
+    return wrapper
+
 
 def clamp_chunk_width(val):
     return max(0, min(val, CHUNK_WIDTH-1))
@@ -36,6 +37,7 @@ class TileManager:
         self.generated_chunks = []
         self.chunkradius = CHUNK_RADIUS
         self.testmode = True
+        self.threads = {}
         opensimplex.random_seed()
 
     def load_map(self):
@@ -70,9 +72,12 @@ class TileManager:
     def draw(self, surf):
         for x in range(self.centerpos - (CHUNK_WIDTH//2),
                        self.centerpos + (CHUNK_WIDTH//2)):
-            surf.blit(self.loaded_chunks[x]["image"],
+            try:
+                surf.blit(self.loaded_chunks[x]["image"],
                       (x*CHUNK_WIDTH*BLOCK_PIXEL_SIZE - self.camera.pos[0],
                        -self.camera.pos[1]))
+            except KeyError:  # hasnt been generated yet
+                draw.rect(surf, "black", (x*CHUNK_WIDTH*BLOCK_PIXEL_SIZE-self.camera.pos[0], -self.camera.pos[1], CHUNK_WIDTH*BLOCK_PIXEL_SIZE, CHUNK_HEIGHT*BLOCK_PIXEL_SIZE))
 
     def set_centerpos(self, new_x: int):
         self.calc_centerpos(new_x)
@@ -84,13 +89,20 @@ class TileManager:
                        center_chunkx + self.chunkradius):
             if self.loaded_chunks.get(x):  # Chunk Found
                 pass
-            else:
+            else:  # chunk not found
+                # if we generated it already
                 if x in self.generated_chunks:
                     self.loadchunk(x)
                 else:
-                    self.generate_new_chunk(x)
+                    # the chunk hasnt been generated before and we
+                    # haven't created an thread to generate the chunk
+                    if self.threads.get(x) is None:
+                        thread = self.generate_new_chunk(x)
+                        self.threads[x] = thread
+
         chunkstounload = []
         for chunk in self.loaded_chunks:
+            # if chunk is far away
             if (abs(chunk - center_chunkx) > self.chunkradius):
                 chunkstounload.append(chunk)
 
@@ -123,7 +135,7 @@ class TileManager:
         except FileNotFoundError:
             return FileNotFoundError
 
-    def calc_block(self, x, y, ground_level):
+    def calc_block(self, x, y, ground_level, biome_tile, biome_tile2):
         filled = True
         block_to_use = 11
         if y < ground_level:  # air
@@ -138,16 +150,14 @@ class TileManager:
                 block_to_use = TILES.AIR.value
             else:
                 if y == ground_level:
-                    block_to_use = TILES.GRASS_BLOCK.value
+                    block_to_use = biome_tile
                 if y > ground_level:
                     if y > ground_level*1.3:
                         block_to_use = TILES.STONE.value
                     else:
-                        block_to_use = TILES.DIRT.value
+                        block_to_use = biome_tile2
         if not filled:
             block_to_use = TILES.AIR.value
-        # if y == CHUNK_HEIGHT-1:
-        #    block_to_use = TILES.BEDROCK.value
         return block_to_use
 
     def generate_vegetation(self, chunkdata):
@@ -169,7 +179,7 @@ class TileManager:
                         tile = chunkdata[neary][nearx]
                         if (tile != TILES.AIR.value and
                             tile != TILES.DIRT.value and
-                            tile != TILES.GRASS_BLOCK.value):
+                           tile != TILES.GRASS_BLOCK.value):
                             can_place_tree = False
 
                     if can_place_tree:
@@ -181,7 +191,7 @@ class TileManager:
         for x in range(0, CHUNK_WIDTH):
             for y in range(0, CHUNK_HEIGHT):
                 if (chunkdata[y][x] == TILES.GRASS_BLOCK.value and
-                    chunkdata[y-1][x] == TILES.AIR.value):
+                   chunkdata[y-1][x] == TILES.AIR.value):
                     if random.choice([True, False]):
                         chunkdata[y-1][x] = random.choice(plant_types).value
                     break
@@ -204,18 +214,28 @@ class TileManager:
         chunkdata[clamp_chunk_height(
             y-4)][clamp_chunk_width(x+1)] = TILES.LEAVES.value
 
+    def calculate_biome(self, val):
+        if val < -0.5:
+            return TILES.SNOW_BLOCK.value, TILES.SNOW_BLOCK.value
+        if val > 0.5:
+            return TILES.SAND.value, TILES.SAND.value
+        else:
+            return TILES.GRASS_BLOCK.value, TILES.DIRT.value
+
     def generate_chunk_terrain(self, chunkpos):
         chunkdata = [[] for x in range(CHUNK_HEIGHT)]
         xstart, xend = chunkpos * CHUNK_WIDTH, (chunkpos+1) * CHUNK_WIDTH
         tile_x = 0
         for x in range(xstart, xend):
             x *= 0.6
-            ground_level = opensimplex.noise2(x=x/CHUNK_WIDTH, y=5)
+            ground_level = opensimplex.noise2(x=x/CHUNK_WIDTH/2, y=5)
             ground_level = int(ground_level * PERLIN_MULTIPLIER)
             ground_level = CHUNK_GROUND_BASE - ground_level
+            biome_tile, biome_tile2 = self.calculate_biome(
+                opensimplex.noise2(x=x/CHUNK_WIDTH/6, y=4))
 
             for y in range(CHUNK_HEIGHT):
-                block_to_use = self.calc_block(x, y, ground_level)
+                block_to_use = self.calc_block(x, y, ground_level, biome_tile, biome_tile2)
                 chunkdata[y].append(block_to_use)
             tile_x += 1
 
@@ -226,6 +246,21 @@ class TileManager:
             chunkdata[CHUNK_HEIGHT-1][x] = TILES.BEDROCK.value
 
         return chunkdata
+
+    @threaded
+    def generate_new_chunk(self, chunkpos):
+        start_time = time.time()
+        print(f"Started generating chunk {chunkpos} with thread")
+        tiledata = self.generate_chunk_terrain(chunkpos)
+        self.loaded_chunks[chunkpos] = {
+                    "tiledata": tiledata,  # maybe np array?
+                    "entitydata": [],  # array([])}
+                    "image": self.render_chunk(tiledata)
+                    }
+        self.generated_chunks.append(chunkpos)
+        # del self.threads[chunkpos]
+        # The threads delete themselves automatically so I dont need to call del
+        print(f"generated chunk {chunkpos} in {time.time()-start_time} seconds")
 
     def generate_ores(self, chunkdata):
         # we have added every block now we can create ores, trees etc.
@@ -269,16 +304,6 @@ class TileManager:
         if val == 9 and y >= CHUNK_HEIGHT*0.8:
             return TILES.DIAMOND_ORE.value
         return random.choice([TILES.COAL_ORE.value, TILES.IRON_ORE.value])
-
-    def generate_new_chunk(self, chunkpos):
-        tiledata = self.generate_chunk_terrain(chunkpos)
-        self.loaded_chunks[chunkpos] = {
-                    "tiledata": tiledata,  # maybe np array?
-                    "entitydata": [],  # array([])}
-                    "image": self.render_chunk(tiledata)
-                    }
-        self.generated_chunks.append(chunkpos)
-        print(f"generated chunk [{chunkpos}]")
 
     def render_chunk(self, terraindata):
         chunk_surf = surface.Surface((CHUNK_WIDTH*BLOCK_PIXEL_SIZE,
