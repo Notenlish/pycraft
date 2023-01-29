@@ -1,5 +1,5 @@
-from pygame import (key, rect, draw, K_w, K_UP, K_a, K_LEFT,
-                    K_s, K_DOWN, K_d, K_RIGHT, MOUSEBUTTONDOWN, mouse)
+from pygame import (key, rect, K_w, K_UP, K_a, K_LEFT,
+                    K_s, K_DOWN, K_d, K_RIGHT, mouse)
 from scripts.object import Object
 from settings import (CHUNK_WIDTH, CHUNK_HEIGHT,
                       CAMERA_OFFSET, PLAYER_SPEED, BLOCK_PIXEL_SIZE)
@@ -56,27 +56,30 @@ class Player(Object):
         # just moving 1 pixel too high up sometimes
 
     def block_calc(self, mpos):
-        outofbounds = False
-        blockx = int(mpos[0] + self.pos[0] + CAMERA_OFFSET)//BLOCK_PIXEL_SIZE
-        blocky = int((mpos[1] + self.pos[1] + CAMERA_OFFSET)//BLOCK_PIXEL_SIZE)
+        if mouse.get_pressed()[0]:
+            outofbounds = False
+            blockx = int(mpos[0] + self.pos[0] + CAMERA_OFFSET)//BLOCK_PIXEL_SIZE
+            blocky = int((mpos[1] + self.pos[1] + CAMERA_OFFSET)//BLOCK_PIXEL_SIZE)
 
-        if clamp(0, blocky, CHUNK_HEIGHT-1) != blocky:
-            outofbounds = True
+            if clamp(0, blocky, CHUNK_HEIGHT-1) != blocky:
+                outofbounds = True
 
-        try:
-            selected_chunk = self.app.tile_manager.loaded_chunks[blockx // CHUNK_WIDTH]
-        except KeyError:
-            outofbounds = True
+            try:
+                selected_chunk = self.app.tile_manager.loaded_chunks[blockx // CHUNK_WIDTH]
+            except KeyError:
+                outofbounds = True
 
-        if not outofbounds:
-            self.selected_block_chunkx = blockx % CHUNK_WIDTH
-            self.selected_block_chunky = blocky
+            if not outofbounds:
+                self.selected_block_chunkx = blockx % CHUNK_WIDTH
+                self.selected_block_chunky = blocky
+                selected_chunk["tiledata"][self.selected_block_chunky][
+                    self.selected_block_chunkx] = self.currentblock
 
-            if mouse.get_pressed()[0]:
-                selected_chunk["tiledata"][self.selected_block_chunky][self.selected_block_chunkx] = self.currentblock
-
+                selected_chunk[
+                    "lightdata"] = self.app.tile_manager.generate_lightdata(
+                        selected_chunk["tiledata"])
                 selected_chunk["image"] = self.app.tile_manager.render_chunk(
-                    selected_chunk["tiledata"])
+                    selected_chunk["tiledata"], selected_chunk["lightdata"])
 
     def update(self, dt, mpos):
         self.move(dt)

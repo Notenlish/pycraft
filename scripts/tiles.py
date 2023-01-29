@@ -23,3 +23,13 @@ class TILES(Enum):
     TREE_SAPLING = 18
     SNOW_BLOCK = 19
     CACTUS = 20
+
+
+TRANSPARENT_BLOCKS = [
+    TILES.AIR.value,
+    TILES.LEAVES.value,
+    TILES.DEAD_SHRUB.value,
+    TILES.GRASS_PLANT.value,
+    TILES.RED_FLOWER.value,
+    TILES.YELLOW_FLOWER.value,
+    TILES.TREE_SAPLING.value]

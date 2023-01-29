@@ -2,8 +2,9 @@ from pygame import surface, draw
 from typing import Dict
 from settings import (CHUNK_RADIUS, CHUNK_WIDTH,
                       CHUNK_HEIGHT, BLOCK_PIXEL_SIZE,
-                      CHUNK_GROUND_BASE, PERLIN_MULTIPLIER)
-from scripts.tiles import TILES
+                      CHUNK_GROUND_BASE, PERLIN_MULTIPLIER,
+                      SKY_COLOR)
+from scripts.tiles import TILES, TRANSPARENT_BLOCKS
 from os import listdir, remove
 import opensimplex
 import json
@@ -65,8 +66,9 @@ class TileManager:
                 self.loaded_chunks[chunkpos] = {
                     "tiledata": chunkdata["tiledata"],
                     "entitydata": chunkdata["entitydata"],
-                    "image": self.render_chunk(chunkdata["tiledata"]),
-                    "lightdata": chunkdata["lightdata"]
+                    "lightdata": chunkdata["lightdata"],
+                    "image": self.render_chunk(
+                        chunkdata["tiledata"], chunkdata["lightdata"])
                     }
                 print(f"LOADED CHUNK {chunkpos}")
                 self.generated_chunks.append(chunkpos)
@@ -195,8 +197,7 @@ class TileManager:
         elif biome_tile == TILES.SNOW_BLOCK.value:
             return arctic
 
-    def can_place_structure(self, x, y, biome_tile,
-                            chunkdata, horizontal, vertical):
+    def can_place_structure(self, x, y, biome_tile, chunkdata, horizontal, vertical):
         # TODO: instead of doing it like this just make
         # it 2 for loops.
         result = []
@@ -228,7 +229,6 @@ class TileManager:
                         [x-1, x, x+1], [y-1, y-2, y-3, y-4])
 
                     if can_place:
-                        print(f"I THINK I CAN PLACE TREE:{y}")
                         self.place_tree(chunkdata, x, y)
                         break  # stop going down
                 elif biome_tile == TILES.SAND.value:
@@ -306,15 +306,47 @@ class TileManager:
 
         return chunkdata
 
+    def generate_lightdata(self, tiledata):
+        # 15 = completely dark
+        lightdata = [[None]*CHUNK_WIDTH for _ in range(CHUNK_HEIGHT)]
+        lightdata[0] = [0]*CHUNK_WIDTH
+        x, y = 0, 0
+        for line in lightdata:
+            x = 0
+            for lightval in line:
+                if lightval is None:
+                    value_to_add = 0
+                    blocks = [(x, y), (x, y-1), (x-1, y), (x+1, y)]
+                    for xval, yval in blocks:
+                        yval = clamp_chunk_height(yval)
+                        foundblock = True
+                        if xval < 0 or xval >= CHUNK_WIDTH:  # out of bounds
+                            try:
+                                block = self.loaded_chunks[xval//CHUNK_WIDTH]["tiledata"]
+                            except KeyError:
+                                foundblock = False
+                        else:
+                            block = tiledata[yval][xval]
+                        if foundblock:
+                            if block not in TRANSPARENT_BLOCKS:
+                                value_to_add += 1  # make it darker
+
+                    lightval = lightdata[y-1][x] + value_to_add
+                    lightdata[y][x] = lightval
+                x += 1
+            y += 1
+        return lightdata
+
     def generate_new_chunk(self, chunkpos):
         start_time = time.time()
         print(f"Started generating chunk {chunkpos} with thread")
         tiledata = self.generate_chunk_terrain(chunkpos)
+        lightdata = self.generate_lightdata(tiledata)
         self.loaded_chunks[chunkpos] = {
                     "tiledata": tiledata,  # maybe np array?
                     "entitydata": [],  # array([])}
-                    "image": self.render_chunk(tiledata),
-                    "lightdata": []  # TODO: add func
+                    "lightdata": lightdata,  # TODO: add func
+                    "image": self.render_chunk(tiledata, lightdata)
                     }
         self.generated_chunks.append(chunkpos)
         print(f"generated chunk {chunkpos} in {time.time()-start_time} seconds")
@@ -362,15 +394,24 @@ class TileManager:
             return TILES.DIAMOND_ORE.value
         return random.choice([TILES.COAL_ORE.value, TILES.IRON_ORE.value])
 
-    def render_chunk(self, terraindata):
+    def render_chunk(self, terraindata, lightdata):
         chunk_surf = surface.Surface((CHUNK_WIDTH*BLOCK_PIXEL_SIZE,
                                       CHUNK_HEIGHT*BLOCK_PIXEL_SIZE))
+        chunk_surf.fill(SKY_COLOR)
+        opacity_surf = surface.Surface((16, 16))
+        opacity_surf.fill("black")
+
         x, y = 0, 0
         for line in terraindata:
             x = 0
             for tile in line:
-                chunk_surf.blit(self.tile_sprs[tile],
-                                (x*BLOCK_PIXEL_SIZE, y*BLOCK_PIXEL_SIZE))
+                light_level = lightdata[y][x]
+                opacity_surf.set_alpha(light_level*17)
+                tile_surf = self.tile_sprs[tile].copy()
+                tile_surf.blit(opacity_surf, (0, 0))
+
+                chunk_surf.blit(tile_surf, (
+                    x*BLOCK_PIXEL_SIZE, y*BLOCK_PIXEL_SIZE))
                 x += 1
             y += 1
         draw.line(chunk_surf, (0, 25, 255), (0, 0),

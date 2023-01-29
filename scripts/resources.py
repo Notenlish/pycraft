@@ -14,9 +14,7 @@ class Resources:
             }
         self.tile_sprs = {}
         for i in TILES:
-            tile_surf = image.load("appdata/tiles/"+str(i.value)+".png").convert_alpha()
-            new_surf = Surface(tile_surf.get_size())
-            # fill transparent parts withskycolor
-            new_surf.fill(SKY_COLOR)
-            new_surf.blit(tile_surf, (0, 0))
-            self.tile_sprs[i.value] = new_surf
+            tile_surf = image.load("appdata/tiles/"+str(i.value)+".png"
+                                   ).convert()
+            # tile_surf.set_colorkey((0, 0, 0, 0))
+            self.tile_sprs[i.value] = tile_surf
