@@ -180,3 +180,6 @@ appdata/tiles/15.png
 appdata/tiles/16.png
 appdata/tiles/17.png
 appdata/tiles/18.png
+*.chunk
+appdata/tiles/19.png
+appdata/tiles/20.png

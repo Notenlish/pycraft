@@ -14,7 +14,10 @@ import threading
 
 def threaded(fn):
     def wrapper(*args, **kwargs):
-        thread = threading.Thread(target=fn, args=args, kwargs=kwargs)
+        # we make it a daemon thread so that the thread is
+        # deleted when the main thread exits
+        thread = threading.Thread(
+            target=fn, args=args, kwargs=kwargs, daemon=True)
         thread.start()
         return thread
     return wrapper
@@ -29,39 +32,41 @@ def clamp_chunk_height(val):
 
 
 class TileManager:
-    def __init__(self, tile_sprs, camera):
+    def __init__(self, app, tile_sprs, camera):
+        self.app = app
         self.tile_sprs = tile_sprs
         self.camera = camera
         self.centerpos = 0
         self.loaded_chunks: Dict[str, dict] = {}
         self.generated_chunks = []
         self.chunkradius = CHUNK_RADIUS
-        self.testmode = True
-        self.threads = {}
-        opensimplex.random_seed()
+        self.testmode = False
+        self.thread = None
+        self.inmap = False
 
     def load_map(self):
-        with open("worlds/testworld1/info.json", "r") as f:
-            map_general_data = json.load(f)
+        with open("world/info.json", "r") as f:
+            map_data = json.load(f)
 
-        self.centerpos = map_general_data["player"]["pos"]
+        self.centerpos = map_data["player"]["chunkpos"]
+        self.app.player.pos = map_data["player"]["playerpos"]
+        self.generated_chunks = map_data["generated_chunks"]
+        self.seed = map_data["map_seed"]
+        opensimplex.seed(self.seed)
+        self.inmap = True
 
-        chunkpos = 0
-        try:
-            self.loadchunk(chunkpos)
-            print(f"loaded {chunkpos} chunk")
-        except FileNotFoundError:
-            print("filenodsadsa")
+        self.thread = self.manage_chunks()
 
     def loadchunk(self, chunkpos):
         try:
-            with open("worlds/testworld1/chunks/"+f"{chunkpos}.json",
+            with open("world/chunks/"+f"{chunkpos}.chunk",
                       "r") as chunkfile:
                 chunkdata = json.load(chunkfile)
                 self.loaded_chunks[chunkpos] = {
                     "tiledata": chunkdata["tiledata"],
                     "entitydata": chunkdata["entitydata"],
-                    "image": self.render_chunk(chunkdata["tiledata"])
+                    "image": self.render_chunk(chunkdata["tiledata"]),
+                    "lightdata": chunkdata["lightdata"]
                     }
                 print(f"LOADED CHUNK {chunkpos}")
                 self.generated_chunks.append(chunkpos)
@@ -84,47 +89,62 @@ class TileManager:
 
     def calc_centerpos(self, new_x):
         self.centerpos = new_x//(CHUNK_WIDTH*BLOCK_PIXEL_SIZE)  # update pos
-        center_chunkx = self.centerpos
-        for x in range(center_chunkx - self.chunkradius,
-                       center_chunkx + self.chunkradius):
-            if self.loaded_chunks.get(x):  # Chunk Found
-                pass
-            else:  # chunk not found
-                # if we generated it already
-                if x in self.generated_chunks:
-                    self.loadchunk(x)
-                else:
-                    # the chunk hasnt been generated before and we
-                    # haven't created an thread to generate the chunk
-                    if self.threads.get(x) is None:
-                        thread = self.generate_new_chunk(x)
-                        self.threads[x] = thread
 
-        chunkstounload = []
-        for chunk in self.loaded_chunks:
-            # if chunk is far away
-            if (abs(chunk - center_chunkx) > self.chunkradius):
-                chunkstounload.append(chunk)
+    @threaded
+    def manage_chunks(self):
+        while self.inmap:
+            center_chunkx = self.centerpos
+            for x in range(center_chunkx - self.chunkradius,
+                           center_chunkx + self.chunkradius):
+                if self.loaded_chunks.get(x):  # Chunk Found
+                    pass
+                else:  # chunk not found
+                    # if we generated it already
+                    if x in self.generated_chunks:
+                        self.loadchunk(x)
+                    else:  # we havent generated the chunk before
+                        self.generate_new_chunk(x)
+                        # I dont need to call threading.Thread since
+                        # the function uses @threaded wrapper
 
-        for c in chunkstounload:
-            self.unload_chunk(c)
+            chunkstounload = []
+            for chunk in self.loaded_chunks:
+                # if chunk is far away
+                if (abs(chunk - center_chunkx) > self.chunkradius):
+                    chunkstounload.append(chunk)
+
+            for c in chunkstounload:
+                self.unload_chunk(c)
+
+            time.sleep(1/60)
+        print("CHUNK_GENERATOR THREAD will kill itself")
 
     def unload_all_chunks(self):
+        self.inmap = False
+        self.thread.join()
         chunks = list(self.loaded_chunks.keys()).copy()
         for c in chunks:
             self.unload_chunk(c)
         print("UNLOADED EVERYTHING")
+
+        with open("world/info.json", "w") as file:
+            data = {}
+            data["player"] = {
+                "chunkpos": self.centerpos,
+                "playerpos": self.app.player.pos,
+                "inventory": [],
+                }
+            data["generated_chunks"] = self.generated_chunks
+            data["map_seed"] = self.seed
+            json.dump(data, file)
+
         if self.testmode:
-            path = "worlds/testworld1/chunks/"
-            chunkfiles = listdir(path)
-            for f in chunkfiles:
-                remove(path+f)
-            print("DELETED EVERY CHUNK")
+            self.delete_all_chunks()
 
     def unload_chunk(self, chunkpos):
         self.loaded_chunks[chunkpos]
         try:
-            with open("worlds/testworld1/chunks/"+f"{chunkpos}.json",
+            with open("world/chunks/"+f"{chunkpos}.chunk",
                       "w") as chunkfile:
                 self.loaded_chunks[chunkpos].pop("image")
                 # idk if this is a good way to remove image from chunk
@@ -160,41 +180,81 @@ class TileManager:
             block_to_use = TILES.AIR.value
         return block_to_use
 
-    def generate_vegetation(self, chunkdata):
+    def get_plant_types(self, biome_tile):
+        grassland = [TILES.GRASS_PLANT, TILES.GRASS_PLANT,
+                     TILES.GRASS_PLANT, TILES.GRASS_PLANT,
+                     TILES.RED_FLOWER, TILES.YELLOW_FLOWER]
+
+        desert = [TILES.DEAD_SHRUB, TILES.AIR]
+        arctic = [TILES.AIR]
+
+        if biome_tile == TILES.GRASS_BLOCK.value:
+            return grassland
+        elif biome_tile == TILES.SAND.value:
+            return desert
+        elif biome_tile == TILES.SNOW_BLOCK.value:
+            return arctic
+
+    def can_place_structure(self, x, y, biome_tile,
+                            chunkdata, horizontal, vertical):
+        # TODO: instead of doing it like this just make
+        # it 2 for loops.
+        result = []
+        for el1 in horizontal:
+            for el2 in vertical:
+                result.append((clamp_chunk_width(el1),
+                               clamp_chunk_height(el2)))
+        can_place = True
+        if chunkdata[y][x] == biome_tile:
+            for nearx, neary in result:
+                tile = chunkdata[neary][nearx]
+                if (tile != TILES.AIR.value):
+                    can_place = False
+                    break
+        else:
+            can_place = False
+        return can_place
+
+    def generate_vegetation(self, chunkdata, biome_tile):
         for _ in range(2):
             # I dont want to create a new cache just so tree leaves
             # dont cut out so I'm just gonna make it from 1 to 6
             x = random.randint(1, CHUNK_WIDTH-2)
             for y in range(0, CHUNK_HEIGHT):
-                if chunkdata[y][x] == TILES.GRASS_BLOCK.value:
-                    can_place_tree = True
-                    a = [x-1, x, x+1]
-                    b = [y-1, y-2, y-3, y-4]
-                    result = []
-                    for el1 in a:
-                        for el2 in b:
-                            result.append((clamp_chunk_width(el1),
-                                           clamp_chunk_height(el2)))
-                    for nearx, neary in result:
-                        tile = chunkdata[neary][nearx]
-                        if (tile != TILES.AIR.value and
-                            tile != TILES.DIRT.value and
-                           tile != TILES.GRASS_BLOCK.value):
-                            can_place_tree = False
+                # current_tile = chunkdata[y][x]
+                if biome_tile == TILES.GRASS_BLOCK.value:
+                    can_place = self.can_place_structure(
+                        x, y, biome_tile, chunkdata,
+                        [x-1, x, x+1], [y-1, y-2, y-3, y-4])
 
-                    if can_place_tree:
+                    if can_place:
+                        print(f"I THINK I CAN PLACE TREE:{y}")
                         self.place_tree(chunkdata, x, y)
-                    break  # stop going down
-        plant_types = [TILES.GRASS_PLANT, TILES.GRASS_PLANT,
-                       TILES.GRASS_PLANT, TILES.GRASS_PLANT,
-                       TILES.RED_FLOWER, TILES.YELLOW_FLOWER]
+                        break  # stop going down
+                elif biome_tile == TILES.SAND.value:
+                    can_place = self.can_place_structure(
+                        x, y, biome_tile, chunkdata, [x], [y-1, y-2, y-3])
+                    if can_place:
+                        self.place_cactus(chunkdata, x, y)
+                        break
+                else:  # not a biome that has vegetation
+                    break
+        plant_types = self.get_plant_types(biome_tile)
         for x in range(0, CHUNK_WIDTH):
             for y in range(0, CHUNK_HEIGHT):
-                if (chunkdata[y][x] == TILES.GRASS_BLOCK.value and
+                if (chunkdata[y][x] == biome_tile and
                    chunkdata[y-1][x] == TILES.AIR.value):
                     if random.choice([True, False]):
                         chunkdata[y-1][x] = random.choice(plant_types).value
-                    break
+                    break  # stop going down
+
+    def place_cactus(self, chunkdata, x, y):
+        yval = clamp_chunk_height(y-1)
+        xval = clamp_chunk_width(x)
+        chunkdata[yval][xval] = TILES.CACTUS.value
+        yval = clamp_chunk_height(y-2)
+        xval = clamp_chunk_width(x)
+        chunkdata[yval][xval] = TILES.CACTUS.value
 
     def place_tree(self, chunkdata, x, y):
         chunkdata[clamp_chunk_height(
@@ -226,13 +286,12 @@ class TileManager:
         chunkdata = [[] for x in range(CHUNK_HEIGHT)]
         xstart, xend = chunkpos * CHUNK_WIDTH, (chunkpos+1) * CHUNK_WIDTH
         tile_x = 0
+        biome_tile, biome_tile2 = self.calculate_biome(opensimplex.noise2(x=xstart/CHUNK_WIDTH/6, y=4))
         for x in range(xstart, xend):
             x *= 0.6
             ground_level = opensimplex.noise2(x=x/CHUNK_WIDTH/2, y=5)
             ground_level = int(ground_level * PERLIN_MULTIPLIER)
             ground_level = CHUNK_GROUND_BASE - ground_level
-            biome_tile, biome_tile2 = self.calculate_biome(
-                opensimplex.noise2(x=x/CHUNK_WIDTH/6, y=4))
 
             for y in range(CHUNK_HEIGHT):
                 block_to_use = self.calc_block(x, y, ground_level, biome_tile, biome_tile2)
@@ -240,14 +299,13 @@ class TileManager:
             tile_x += 1
 
         self.generate_ores(chunkdata)
-        self.generate_vegetation(chunkdata)
+        self.generate_vegetation(chunkdata, biome_tile)
 
-        for x in range(0, 8):  # bedrock
+        for x in range(0, CHUNK_WIDTH):  # bedrock
             chunkdata[CHUNK_HEIGHT-1][x] = TILES.BEDROCK.value
 
         return chunkdata
 
-    @threaded
     def generate_new_chunk(self, chunkpos):
         start_time = time.time()
         print(f"Started generating chunk {chunkpos} with thread")
@@ -255,11 +313,10 @@ class TileManager:
         self.loaded_chunks[chunkpos] = {
                     "tiledata": tiledata,  # maybe np array?
                     "entitydata": [],  # array([])}
-                    "image": self.render_chunk(tiledata)
+                    "image": self.render_chunk(tiledata),
+                    "lightdata": []  # TODO: add func
                     }
         self.generated_chunks.append(chunkpos)
-        # del self.threads[chunkpos]
-        # The threads delete themselves automatically so I dont need to call del
         print(f"generated chunk {chunkpos} in {time.time()-start_time} seconds")
 
     def generate_ores(self, chunkdata):
@@ -320,6 +377,24 @@ class TileManager:
                   (0, CHUNK_HEIGHT*BLOCK_PIXEL_SIZE), 2)
 
         return chunk_surf
+
+    def reset_map(self):
+        self.inmap = False
+        self.thread.join()
+
+        self.loaded_chunks = {}
+        self.generated_chunks = []
+        self.delete_all_chunks()
+
+        self.inmap = True
+        self.thread = self.manage_chunks()
+
+    def delete_all_chunks(self):
+        path = "world/chunks/"
+        chunkfiles = listdir(path)
+        for f in chunkfiles:
+            remove(path+f)
+        print("DELETED EVERY CHUNK")
 
     def __str__(self):
         return str(self.__class__) + ": " + str(self.__dict__)

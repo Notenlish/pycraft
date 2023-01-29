@@ -22,3 +22,4 @@ class TILES(Enum):
     YELLOW_FLOWER = 17
     TREE_SAPLING = 18
     SNOW_BLOCK = 19
+    CACTUS = 20

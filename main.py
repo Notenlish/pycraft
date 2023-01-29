@@ -25,11 +25,10 @@ class APP:
         self.res.loadtextures()
         self.camera = camera((0, 0))
 
-        self.tile_manager = TileManager(self.res.tile_sprs, self.camera)
-        self.tile_manager.load_map()
         self.player = Player(self, [200, 200],
                              self.res.playertextures["idle"])
-
+        self.tile_manager = TileManager(self, self.res.tile_sprs, self.camera)
+        self.tile_manager.load_map()
         self.mode = "game"
 
     def start_new_map(self):
@@ -72,12 +71,16 @@ class APP:
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 self.exit()
-            if event.type == pg.MOUSEBUTTONDOWN:
+            elif event.type == pg.MOUSEBUTTONDOWN:
                 if self.mode == "start":
                     self.start_screen.select(self.mpos)
-            if event.type == pg.MOUSEWHEEL:
+            elif event.type == pg.MOUSEWHEEL:
                 if self.mode == "game":
                     self.player.change_block(event.y)
+            elif event.type == pg.KEYDOWN:
+                if event.key == pg.K_F5:
+                    print("FUCK THIS SHIT")
+                    self.tile_manager.reset_map()
 
     def update(self):
         if self.mode == "game":

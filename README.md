@@ -6,3 +6,12 @@
 ## Differences
   * It uses opensimplex noise
   * The cave generation is done with perlin caves, not perlin worms
+
+## Possible stuff to add:
+  * Add support for more than 1 world
+  * Add more biomes
+  * Add entities
+  * Add monsters
+  * Add redstone
+  * add carts, boats, sea
+  * Add structures such as villages, sea wrecks etc.
