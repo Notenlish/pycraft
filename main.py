@@ -32,7 +32,13 @@ class APP:
         self.mode = "game"
 
     def start_new_map(self):
-        pass
+        self.res.loadtextures()
+        self.camera = camera((0, 0))
+        self.tile_manager = TileManager(self, self.res.tile_sprs, self.camera)
+        self.player = Player(self, [200, 200],
+                             self.res.playertextures["idle"])
+        self.tile_manager.new_map()
+        self.mode = "game"
 
     def exit(self):
         if self.mode == "game":
@@ -58,7 +64,7 @@ class APP:
         self.window.blit(self.res.menufont.render("pos: " + str(
             self.tile_manager.centerpos), False, "green"), (0, 20))
         mbsize = str(sys.getsizeof(self.tile_manager.generated_chunks)/1024/1024)
-        self.window.blit(self.res.menufont.render("Gen: {}".format(mbsize[:5]),
+        self.window.blit(self.res.menufont.render("Gen_size: {}".format(mbsize[:5]),
                                                   False, "green"), (0, 40))
         self.window.blit(self.res.menufont.render("x:{} y:{} block:{}".format(
             self.player.selected_block_chunkx,
@@ -79,7 +85,6 @@ class APP:
                     self.player.change_block(event.y)
             elif event.type == pg.KEYDOWN:
                 if event.key == pg.K_F5:
-                    print("FUCK THIS SHIT")
                     self.tile_manager.reset_map()
 
     def update(self):

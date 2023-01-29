@@ -58,6 +58,18 @@ class TileManager:
 
         self.thread = self.manage_chunks()
 
+    def new_map(self):
+        self.delete_all_chunks()
+        self.app.player.pos = [0, 0]
+        self.centerpos = 0
+        self.generated_chunks = []
+        self.seed = random.randint(111_111_111, 999_999_999)
+        opensimplex.seed(self.seed)
+        print(f"New map seed: {self.seed}")
+
+        self.inmap = True
+        self.thread = self.manage_chunks()
+
     def loadchunk(self, chunkpos):
         try:
             with open("world/chunks/"+f"{chunkpos}.chunk",
@@ -144,7 +156,6 @@ class TileManager:
             self.delete_all_chunks()
 
     def unload_chunk(self, chunkpos):
-        self.loaded_chunks[chunkpos]
         try:
             with open("world/chunks/"+f"{chunkpos}.chunk",
                       "w") as chunkfile:
@@ -198,20 +209,16 @@ class TileManager:
             return arctic
 
     def can_place_structure(self, x, y, biome_tile, chunkdata, horizontal, vertical):
-        # TODO: instead of doing it like this just make
-        # it 2 for loops.
-        result = []
-        for el1 in horizontal:
-            for el2 in vertical:
-                result.append((clamp_chunk_width(el1),
-                               clamp_chunk_height(el2)))
         can_place = True
         if chunkdata[y][x] == biome_tile:
-            for nearx, neary in result:
-                tile = chunkdata[neary][nearx]
-                if (tile != TILES.AIR.value):
-                    can_place = False
-                    break
+            for el1 in horizontal:
+                for el2 in vertical:
+                    xval = clamp_chunk_width(el1)
+                    yval = clamp_chunk_height(el2)
+                    tile = chunkdata[yval][xval]
+                    if (tile != TILES.AIR.value):
+                        can_place = False
+                        break
         else:
             can_place = False
         return can_place
@@ -274,10 +281,11 @@ class TileManager:
         chunkdata[clamp_chunk_height(
             y-4)][clamp_chunk_width(x+1)] = TILES.LEAVES.value
 
-    def calculate_biome(self, val):
-        if val < -0.5:
+    def calculate_biome(self, x, y):
+        val = opensimplex.noise2(x=x, y=y)
+        if val < -0.4:
             return TILES.SNOW_BLOCK.value, TILES.SNOW_BLOCK.value
-        if val > 0.5:
+        if val > 0.4:
             return TILES.SAND.value, TILES.SAND.value
         else:
             return TILES.GRASS_BLOCK.value, TILES.DIRT.value
@@ -286,7 +294,7 @@ class TileManager:
         chunkdata = [[] for x in range(CHUNK_HEIGHT)]
         xstart, xend = chunkpos * CHUNK_WIDTH, (chunkpos+1) * CHUNK_WIDTH
         tile_x = 0
-        biome_tile, biome_tile2 = self.calculate_biome(opensimplex.noise2(x=xstart/CHUNK_WIDTH/6, y=4))
+        biome_tile, biome_tile2 = self.calculate_biome(xstart/CHUNK_WIDTH/64, 4)
         for x in range(xstart, xend):
             x *= 0.6
             ground_level = opensimplex.noise2(x=x/CHUNK_WIDTH/2, y=5)
@@ -306,7 +314,7 @@ class TileManager:
 
         return chunkdata
 
-    def generate_lightdata(self, tiledata):
+    def generate_lightdata(self, tiledata, chunkpos):
         # 15 = completely dark
         lightdata = [[None]*CHUNK_WIDTH for _ in range(CHUNK_HEIGHT)]
         lightdata[0] = [0]*CHUNK_WIDTH
@@ -322,17 +330,18 @@ class TileManager:
                         foundblock = True
                         if xval < 0 or xval >= CHUNK_WIDTH:  # out of bounds
                             try:
-                                block = self.loaded_chunks[xval//CHUNK_WIDTH]["tiledata"]
+                                chunk = self.loaded_chunks[(xval//CHUNK_WIDTH)+chunkpos]["tiledata"]
+                                block = chunk[yval%CHUNK_HEIGHT][xval%CHUNK_WIDTH]
                             except KeyError:
                                 foundblock = False
                         else:
                             block = tiledata[yval][xval]
                         if foundblock:
                             if block not in TRANSPARENT_BLOCKS:
-                                value_to_add += 1  # make it darker
+                                value_to_add += 0.5  # make it darker
 
-                    lightval = lightdata[y-1][x] + value_to_add
-                    lightdata[y][x] = lightval
+                    lightval = lightdata[y-1][x] + int(value_to_add)
+                    lightdata[y][x] = 0# lightval
                 x += 1
             y += 1
         return lightdata
@@ -341,11 +350,11 @@ class TileManager:
         start_time = time.time()
         print(f"Started generating chunk {chunkpos} with thread")
         tiledata = self.generate_chunk_terrain(chunkpos)
-        lightdata = self.generate_lightdata(tiledata)
+        lightdata = self.generate_lightdata(tiledata, chunkpos)
         self.loaded_chunks[chunkpos] = {
                     "tiledata": tiledata,  # maybe np array?
                     "entitydata": [],  # array([])}
-                    "lightdata": lightdata,  # TODO: add func
+                    "lightdata": lightdata,
                     "image": self.render_chunk(tiledata, lightdata)
                     }
         self.generated_chunks.append(chunkpos)
@@ -353,7 +362,7 @@ class TileManager:
 
     def generate_ores(self, chunkdata):
         # we have added every block now we can create ores, trees etc.
-        for _ in range(10):
+        for _ in range(15):
             val = random.randint(0, 9)
             xpos = random.randint(0, CHUNK_WIDTH-1)
             ypos = random.randint(0, CHUNK_HEIGHT-1)

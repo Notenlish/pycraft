@@ -77,7 +77,7 @@ class Player(Object):
 
                 selected_chunk[
                     "lightdata"] = self.app.tile_manager.generate_lightdata(
-                        selected_chunk["tiledata"])
+                        selected_chunk["tiledata"], blockx//CHUNK_WIDTH)
                 selected_chunk["image"] = self.app.tile_manager.render_chunk(
                     selected_chunk["tiledata"], selected_chunk["lightdata"])
 
