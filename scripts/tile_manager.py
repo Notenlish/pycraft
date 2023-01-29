@@ -152,9 +152,6 @@ class TileManager:
             data["map_seed"] = self.seed
             json.dump(data, file)
 
-        if self.testmode:
-            self.delete_all_chunks()
-
     def unload_chunk(self, chunkpos):
         try:
             with open("world/chunks/"+f"{chunkpos}.chunk",
@@ -373,9 +370,7 @@ class TileManager:
                                  random.choice([-1, 0, 1])]
                 length = random.choice([1, 2, 3])
                 size_multiplier = random.choice([0, 1])
-
                 ore = self.generate_ore_type(val, orey)
-
                 for i in range(length):
                     for xs in range(orex-size_multiplier, orex+size_multiplier):
                         for ys in range(orey-size_multiplier, orey+size_multiplier):
@@ -443,7 +438,8 @@ class TileManager:
         path = "world/chunks/"
         chunkfiles = listdir(path)
         for f in chunkfiles:
-            remove(path+f)
+            if f.endswith(".chunk"):
+                remove(path+f)
         print("DELETED EVERY CHUNK")
 
     def __str__(self):
