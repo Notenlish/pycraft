@@ -311,37 +311,43 @@ class TileManager:
 
         return chunkdata
 
-    def generate_lightdata(self, tiledata, chunkpos):
-        # 15 = completely dark
-        lightdata = [[None]*CHUNK_WIDTH for _ in range(CHUNK_HEIGHT)]
-        lightdata[0] = [0]*CHUNK_WIDTH
-        x, y = 0, 0
-        for line in lightdata:
-            x = 0
-            for lightval in line:
-                if lightval is None:
-                    value_to_add = 0
-                    blocks = [(x, y), (x, y-1), (x-1, y), (x+1, y)]
-                    for xval, yval in blocks:
-                        yval = clamp_chunk_height(yval)
-                        foundblock = True
-                        if xval < 0 or xval >= CHUNK_WIDTH:  # out of bounds
-                            try:
-                                chunk = self.loaded_chunks[(xval//CHUNK_WIDTH)+chunkpos]["tiledata"]
-                                block = chunk[yval%CHUNK_HEIGHT][xval%CHUNK_WIDTH]
-                            except KeyError:
-                                foundblock = False
-                        else:
-                            block = tiledata[yval][xval]
-                        if foundblock:
-                            if block not in TRANSPARENT_BLOCKS:
-                                value_to_add += 0.5  # make it darker
+    def generate_lightdata(self, terraindata, chunkpos):
+        rows = len(terraindata)
+        cols = len(terraindata[0])
+        lightdata = [[15 for j in range(cols)] for i in range(rows)]
 
-                    lightval = lightdata[y-1][x] + int(value_to_add)
-                    lightdata[y][x] = 0# lightval
-                x += 1
-            y += 1
+        # Find all the light sources in the terrain
+        sources = []
+        for row in range(rows):
+            for col in range(cols):
+                if terraindata[row][col] == 0:
+                    has_direct_sunlight = True
+                    for i in range(row, 0, -1):
+                        if terraindata[i][col] not in TRANSPARENT_BLOCKS:
+                            has_direct_sunlight = False
+                            break
+                    if has_direct_sunlight:
+                        sources.append((row, col))
+
+        # Propagate light from the sources
+        while sources:
+            row, col = sources.pop()
+            light_level = lightdata[row][col] - 1
+            if light_level < 0:
+                continue
+            for r, c in [(row - 1, col), (row + 1, col), (row, col - 1), (row, col + 1)]:
+                if 0 <= r < rows and 0 <= c < cols:
+                    if terraindata[r][c] not in TRANSPARENT_BLOCKS and lightdata[r][c] > light_level:
+                        lightdata[r][c] = light_level
+                        sources.append((r, c))
+                    elif terraindata[r][c] in TRANSPARENT_BLOCKS and lightdata[r][c] > light_level:
+                        lightdata[r][c] = light_level
+                        sources.append((r, c))
+
         return lightdata
+
+
+
 
     def generate_new_chunk(self, chunkpos):
         start_time = time.time()
@@ -355,7 +361,6 @@ class TileManager:
                     "image": self.render_chunk(tiledata, lightdata)
                     }
         self.generated_chunks.append(chunkpos)
-        print(f"generated chunk {chunkpos} in {time.time()-start_time} seconds")
 
     def generate_ores(self, chunkdata):
         # we have added every block now we can create ores, trees etc.
