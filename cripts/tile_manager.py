@@ -312,8 +312,22 @@ class TileManager:
         return chunkdata
 
     def generate_lightdata(self, terraindata, chunkpos):
+
+
         lightdata = [[None] * CHUNK_WIDTH for _ in range(CHUNK_HEIGHT)]
-        x, y = 0, 0  # the top of the chunk
+        x = 0
+        y = MAX_BLOCK_HEIGHT  # en yukarısı ise
+        while y > 0:
+            while x < CHUNK_WIDTH:
+                blockType = getBlockType(x, y)
+                # eğer şuanki tile y seviyesi en yüksek ise veya tepesindeki komşunun seviyesi 15 ve şu andaki block hava ise 
+                if y == MAX_BLOCK_HEIGHT or (topNeighborLightLevel == 15 and blockType == AIR):
+                    lightdata[y][x] = 15
+                else:
+                    lightdata[y][x] = getMaxLightLevelOfNeighbors() - 1 # Neighbors here would be the blocks to the left/right/top/bottom/front/back
+                x += 1
+        y -= 1
+
         MAX_BLOCK_HEIGHT = CHUNK_HEIGHT-1
         # in my game, y: 0 means top, y:128 means bottom(yeah Ik its weird)
         while y < CHUNK_HEIGHT:
@@ -336,18 +350,14 @@ class TileManager:
         lightSourceData = [[None] * CHUNK_WIDTH for _ in range(CHUNK_HEIGHT)]
         # Find all light sources
         lightSourcePositions = []
-        LIGHTSOURCES = []
         for y in range(CHUNK_HEIGHT):
             for x in range(CHUNK_WIDTH):
-                blocktype = terraindata[y][x]
-                if blocktype in LIGHTSOURCES:  # if block is lightsource
+                if getBlockType(x, y).isLightSource():
                     lightSourcePositions.append( (x, y) ) # append a tuple pair
-                elif blocktype == TILES.AIR.value and y == 0:  #top of the map
-                    lightSourcePositions.append( (x, y) )
+        
         for lightSourcePosition in lightSourcePositions:
             # Do a flood fill from this light source where each light source gets the max neighbor level - 1
             floodFillLightSource(lightSourcePosition)
-        return [[0]*CHUNK_WIDTH for _ in range(CHUNK_HEIGHT)]  # temporary, will delete later
 
     def get_max_lightlevel_neighbours(terraindata, chunkpos, pos):
         x, y = pos
