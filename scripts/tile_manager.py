@@ -312,6 +312,7 @@ class TileManager:
         return chunkdata
 
     def generate_lightdata(self, terraindata, chunkpos):
+        """
         lightdata = [[None] * CHUNK_WIDTH for _ in range(CHUNK_HEIGHT)]
         x, y = 0, 0  # the top of the chunk
         MAX_BLOCK_HEIGHT = CHUNK_HEIGHT-1
@@ -347,9 +348,10 @@ class TileManager:
         for lightSourcePosition in lightSourcePositions:
             # Do a flood fill from this light source where each light source gets the max neighbor level - 1
             floodFillLightSource(lightSourcePosition)
+        """
         return [[0]*CHUNK_WIDTH for _ in range(CHUNK_HEIGHT)]  # temporary, will delete later
 
-    def get_max_lightlevel_neighbours(terraindata, chunkpos, pos):
+    def get_max_lightlevel_neighbours(self, terraindata, chunkpos, pos):
         x, y = pos
         neighbours = {}
         tiles_to_check = [(x-1, y, "left"), (x+1, y, "right"), (x, y-1, "bottom"), (x, y+1, "top")]

@@ -3,7 +3,7 @@ from pygame import draw, font, rect
 
 
 class Element:
-    def __init__(self, text, action, height, font: font.Font):
+    def __init__(self, text: str, action, height: int, font: font.Font):
         self.text: str = text
         self.action = action
         self.height: int = height
@@ -29,7 +29,7 @@ class StartScreen:
 
     def calculate_positions(self):
         e = ["element", "space"]
-        for i in range(len(self.elements)-2):
+        for _ in range(len(self.elements)-2):
             e.append("element")
             e.append("space")
         e.append("element")
@@ -51,7 +51,7 @@ class StartScreen:
                 (self.element_centerx - u.width//2),
                 startpos, u.width, u.height)
 
-            # maybe I dont need this
+            # maybe I dont need this  # idk maybe I do
             self.elements[index].rect = self.elementpos[index]
             startpos += heightforspace + u.height
 
