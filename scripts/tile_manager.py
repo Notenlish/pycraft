@@ -72,7 +72,7 @@ class TileManager:
 
     def loadchunk(self, chunkpos):
         try:
-            with open("world/chunks/"+f"{chunkpos}.chunk",
+            with open("./world/chunks/"+f"{chunkpos}.chunk",
                       "r") as chunkfile:
                 chunkdata = json.load(chunkfile)
                 self.loaded_chunks[chunkpos] = {
@@ -154,7 +154,7 @@ class TileManager:
 
     def unload_chunk(self, chunkpos):
         try:
-            with open("world/chunks/"+f"{chunkpos}.chunk",
+            with open("./world/chunks/"+f"{chunkpos}.chunk",
                       "w") as chunkfile:
                 self.loaded_chunks[chunkpos].pop("image")
                 # idk if this is a good way to remove image from chunk
@@ -463,7 +463,7 @@ class TileManager:
         self.thread = self.manage_chunks()
 
     def delete_all_chunks(self):
-        path = "world/chunks/"
+        path = "./world/chunks/"
         chunkfiles = listdir(path)
         for f in chunkfiles:
             if f.endswith(".chunk"):
